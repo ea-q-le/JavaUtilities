@@ -6,8 +6,6 @@ import java.util.stream.Collectors;
  * Utility class related to DataBase actions.
  * Includes utilities to create DB connection, destroy DB connection,
  * record outcomes of given queries, etc.
- *
- * @author Shahin 'Sean' Gadimov
  */
 public class DBUtils {
 
