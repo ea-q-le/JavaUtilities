@@ -1,0 +1,99 @@
+import com.jcraft.jsch.*;
+
+import java.io.File;
+import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Properties;
+
+/**
+ * Utility class related to uploading files to SFTP server.
+ * Includes utilities to create and close SFTP connection,
+ * upload files and folders to SFTP server.
+ */
+public class SFTPUtils {
+
+    /** private static instances of SFTP session and channels */
+    private static Session session;
+    private static Channel channel;
+    private static ChannelSftp channelSftp;
+
+
+    /**Connects to SFTP server per credentials defined in *configuration.properties*.*/
+    public static void createSFTPConnection() {
+        String server = ConfigReader.getProperty("sftp_server");
+        int port = Integer.parseInt(ConfigReader.getProperty("sftp_port"));
+        String login = ConfigReader.getProperty("sftp_login");
+        String password = ConfigReader.getProperty("sftp_password");
+
+        try {
+            JSch jsch = new JSch();
+            session = jsch.getSession(login, server, port);
+            session.setPassword(password.getBytes(Charset.forName("ISO-8859-1")));
+
+            Properties config = new java.util.Properties();
+            config.put("StrictHostKeyChecking", "no");
+            session.setConfig(config);
+            session.connect();
+
+            channel = session.openChannel("sftp");
+            channel.connect();
+            channelSftp = (ChannelSftp) channel;
+        } catch (JSchException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    /**Given an upload destination path as a String, and file(s) to upload as
+     * a String or String[] or String varargs, uploads the file into the SFTP destination folder.
+     * By default, the root level destination folder in SFTP server is "/"
+     * @param destinationFolder as a String, destination path within SFTP server
+     * @param sourceFiles as a String varargs, files to upload
+     */
+    public static void uploadFiles(String destinationFolder, String...sourceFiles) {
+        if (channelSftp == null || session == null || !session.isConnected() || !channelSftp.isConnected())
+            throw new RuntimeException("Connection to server is closed.");
+
+        if (sourceFiles.length == 0 || sourceFiles[0].isEmpty())
+            throw new RuntimeException("Source file(s) undefined.");
+
+        if (destinationFolder.isEmpty())
+            throw new RuntimeException("Destination folder undefined. Use '/' for root folder.");
+
+        try {
+            for (String file : sourceFiles)
+                channelSftp.put(file, destinationFolder);
+        } catch (SftpException e) {
+            e.printStackTrace();
+        }
+    }
+    
+
+    /**Given an upload destination path as a String, and a path to the folder to be uploaded
+     * as a String, stores the files within the folder in a list and calls the
+     * uploadFiles(String, String...) method.
+     * @param destinationFolder as a String, use '/' for the root level of the SFTP server
+     * @param uploadableFolderPath as a String, path to the folder
+     */
+    public static void uploadFolder(String destinationFolder, String uploadableFolderPath) {
+        List<String> sourceFiles = new ArrayList<>();
+
+        File folder = new File(uploadableFolderPath);
+
+        for (File f : folder.listFiles()) {
+            if (f.isDirectory()) continue;
+            sourceFiles.add(f.getAbsolutePath());
+        }
+
+        uploadFiles(destinationFolder, sourceFiles.toArray(new String[sourceFiles.size()]));
+    }
+    
+
+    /** Disconnects channelSftp, channel and session instances. */
+    public static void destroySFTPConnection() {
+        if (channelSftp != null) channelSftp.disconnect();
+        if (channel != null) channel.disconnect();
+        if (session != null) session.disconnect();
+    }
+}
